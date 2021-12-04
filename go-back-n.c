@@ -36,10 +36,10 @@ struct pkt {
 
 /********* STUDENTS WRITE THE NEXT SEVEN ROUTINES *********/
 
-char A_available;
 int A_seqnum;
+int A_nextAck;
 int B_nextSeq;
-struct pkt A_lastSent;
+struct pkt A_buffer[50];
 
 
 /* called from layer 5, passed the data to be sent to other side */
@@ -55,8 +55,7 @@ A_output(message)
   }
   printf("\n");
 
-  if(A_available){
-    A_available = 0;
+  if(A_seqnum<50){
     packet.seqnum = A_seqnum;
     packet.acknum = 0;
     packet.checksum = A_seqnum;
@@ -66,10 +65,12 @@ A_output(message)
       packet.checksum += (int) message.data[i];
     }
 
-    A_seqnum = A_seqnum?0:1;
-    A_lastSent = packet;
+    A_buffer[A_seqnum] = packet;
     tolayer3(0,packet);
-    starttimer(0,50.0);
+    if(A_seqnum==A_nextAck){
+      starttimer(0,50.0);
+    }
+    A_seqnum++;
   }
 }
 
@@ -84,27 +85,33 @@ A_input(packet)
   struct pkt packet;
 {
   printf("ACK recebido por A...\n");
-  if(packet.acknum==A_lastSent.seqnum && packet.checksum == packet.acknum){
+  if(packet.acknum >= A_nextAck && packet.checksum == packet.acknum){
     printf("ACK valido\n");
     stoptimer(0);
-    A_available = 1;
+    A_nextAck = packet.acknum+1;
+    if(A_seqnum!=A_nextAck){
+      starttimer(0,50.0);
+    }
   }
 }
 
 /* called when A's timer goes off */
 A_timerinterrupt()
 {
-  printf("Timeout, retransmitindo\n");
-  tolayer3(0,A_lastSent);
+  int i;
+  printf("Timeout, retransmitindo a partir de %d\n", A_nextAck);
   starttimer(0,50.0);
+  for(i=A_nextAck;i<A_seqnum;i++){
+    tolayer3(0,A_buffer[i]);
+  }
 }
 
 /* the following routine will be called once (only) before any other */
 /* entity A routines are called. You can use it to do any initialization */
 A_init()
 {
-  A_available = 1;
   A_seqnum = 0;
+  A_nextAck = 0;
 }
 
 
@@ -128,21 +135,25 @@ B_input(packet)
   if(packet.checksum==checksum){
     printf("Checksum válido\n");
 
-    ackPkt.acknum = packet.seqnum;
-    ackPkt.seqnum = 0;
-    ackPkt.checksum = ackPkt.acknum;
-    printf("Enviando ACK pacote %d\n", packet.seqnum);
-    tolayer3(1,ackPkt);
-
-    if(packet.seqnum==B_nextSeq){
-      B_nextSeq = B_nextSeq?0:1;
-
-      printf("Enviando a mensagem a seguir para a camada 5 de B: ");
-      for(i=0;i<20;i++){
-        printf("%c", message.data[i]);
+    if(packet.seqnum<=B_nextSeq){
+      if(packet.seqnum<B_nextSeq){
+        ackPkt.acknum = B_nextSeq-1;
       }
-      printf("\n");
-      tolayer5(1,message);
+      else{
+        ackPkt.acknum = packet.seqnum;
+        B_nextSeq = packet.seqnum+1;
+
+        printf("Enviando a mensagem a seguir para a camada 5 de B: ");
+        for(i=0;i<20;i++){
+          printf("%c", message.data[i]);
+        }
+        printf("\n");
+        tolayer5(1,message);
+      }
+      ackPkt.seqnum = 0;
+      ackPkt.checksum = ackPkt.acknum;
+      printf("Enviando ACK pacote %d\n", ackPkt.acknum);
+      tolayer3(1,ackPkt);
     }
   }
 }
