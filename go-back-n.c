@@ -84,8 +84,13 @@ B_output(message)  /* need be completed only for extra credit */
 A_input(packet)
   struct pkt packet;
 {
+  int checksum, i;
   printf("ACK recebido por A...\n");
-  if(packet.acknum >= A_nextAck && packet.checksum == packet.acknum){
+  checksum = packet.seqnum + packet.acknum;
+  for(i=0;i<20;i++){
+    checksum += packet.payload[i];
+  }
+  if(packet.acknum >= A_nextAck && packet.checksum == checksum){
     printf("ACK valido\n");
     stoptimer(0);
     A_nextAck = packet.acknum+1;
@@ -126,35 +131,36 @@ B_input(packet)
   struct msg message;
   printf("Pacote recebido por B\n");
 
-  checksum = packet.seqnum;
+  checksum = packet.seqnum + packet.acknum;
   for(i=0;i<20;i++){
     checksum += (int) packet.payload[i];
     message.data[i] = packet.payload[i];
   }
 
-  if(packet.checksum==checksum){
-    printf("Checksum válido\n");
+  if(packet.checksum==checksum && packet.seqnum<=B_nextSeq){
+    printf("Checksum e seqnum válidos\n");
 
-    if(packet.seqnum<=B_nextSeq){
-      if(packet.seqnum<B_nextSeq){
-        ackPkt.acknum = B_nextSeq-1;
-      }
-      else{
-        ackPkt.acknum = packet.seqnum;
-        B_nextSeq = packet.seqnum+1;
-
-        printf("Enviando a mensagem a seguir para a camada 5 de B: ");
-        for(i=0;i<20;i++){
-          printf("%c", message.data[i]);
-        }
-        printf("\n");
-        tolayer5(1,message);
-      }
-      ackPkt.seqnum = 0;
-      ackPkt.checksum = ackPkt.acknum;
-      printf("Enviando ACK pacote %d\n", ackPkt.acknum);
-      tolayer3(1,ackPkt);
+    if(packet.seqnum<B_nextSeq){
+      ackPkt.acknum = B_nextSeq-1;
     }
+    else{
+      ackPkt.acknum = packet.seqnum;
+      B_nextSeq = packet.seqnum+1;
+
+      printf("Enviando a mensagem a seguir para a camada 5 de B: ");
+      for(i=0;i<20;i++){
+        printf("%c", message.data[i]);
+      }
+      printf("\n");
+      tolayer5(1,message);
+    }
+    ackPkt.seqnum = 0;
+    ackPkt.checksum = ackPkt.acknum;
+    for(i=0;i<20;i++){
+      ackPkt.checksum += (int) ackPkt.payload[i];
+    }
+    printf("Enviando ACK pacote %d\n", ackPkt.acknum);
+    tolayer3(1,ackPkt);
   }
 }
 

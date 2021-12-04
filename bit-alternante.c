@@ -83,8 +83,13 @@ B_output(message)  /* need be completed only for extra credit */
 A_input(packet)
   struct pkt packet;
 {
+  int checksum, i;
   printf("ACK recebido por A...\n");
-  if(packet.acknum==A_lastSent.seqnum && packet.checksum == packet.acknum){
+  checksum = packet.seqnum + packet.acknum;
+  for(i=0;i<20;i++){
+    checksum += (int) packet.payload[i];
+  }
+  if(packet.acknum==A_lastSent.seqnum && packet.checksum == checksum){
     printf("ACK valido\n");
     stoptimer(0);
     A_available = 1;
@@ -119,7 +124,7 @@ B_input(packet)
   struct msg message;
   printf("Pacote recebido por B\n");
 
-  checksum = packet.seqnum;
+  checksum = packet.seqnum + packet.acknum;
   for(i=0;i<20;i++){
     checksum += (int) packet.payload[i];
     message.data[i] = packet.payload[i];
@@ -131,6 +136,9 @@ B_input(packet)
     ackPkt.acknum = packet.seqnum;
     ackPkt.seqnum = 0;
     ackPkt.checksum = ackPkt.acknum;
+    for(i=0;i<20;i++){
+      ackPkt.checksum += (int) ackPkt.payload[i];
+    }
     printf("Enviando ACK pacote %d\n", packet.seqnum);
     tolayer3(1,ackPkt);
 
